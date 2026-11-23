@@ -8,8 +8,10 @@ declare module 'claude-code' {
       active: ThemeChoice
       /** The theme the session's folder points to. */
       detected: ThemeChoice
-      /** The session's project name, as shown in the band and the picker. */
+      /** The session's project name, as shown in the picker. */
       folder: string
+      /** The look every chat in this project shares, or '' for automatic. */
+      projectLook: ThemeChoice
     }
   }
 }

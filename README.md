@@ -36,7 +36,8 @@ Tested with Claude Code 2.1.330.
 
 - The Look widget opens in the session rail of each desktop chat. Expand it to pick a theme, **Own color / Auto** (back to the folder's look) or **Plain**.
 - `/look` opens the picker. `/look lanterns`, `/look plain` or `/look auto` switch directly.
-- A chat keeps its pick, including after you resume it.
+- A pick applies to that chat and is kept when you resume it.
+- **Use for all [project] chats** in the picker, or `/look project`, makes the current look the project's: every chat in that folder uses it, new ones included, unless a chat has its own pick. Other chats already open switch when they next start or the app reconnects. **Project back to automatic**, or `/look project reset`, undoes it.
 - Close the picker with its X and it stays closed in that chat until you run `/look`.
 
 ## Give your own projects a hand-drawn theme
