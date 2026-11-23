@@ -99,7 +99,8 @@ async function pinProject($: EngineInterface): Promise<string> {
   await $.store.set(projectKey(where), id)
   await $.store.delete(`choice:${await $.session.id()}`)
   await update($, projectLook, () => id)
-  return `Every ${where} chat now uses ${themeById(id)?.label ?? describe(id).toLowerCase()}, unless a chat has its own pick. Other open ${where} chats switch when they next start or the app reconnects.`
+  const look = themeById(id)?.label ?? (parseAuto(id) !== undefined ? "this chat's look" : 'the plain look')
+  return `Every ${where} chat now uses ${look}, unless a chat has its own pick. Other open ${where} chats switch when they next start or the app reconnects.`
 }
 
 /** Puts the project back to its automatic look. */
