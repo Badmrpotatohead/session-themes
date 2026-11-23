@@ -1,0 +1,8 @@
+{
+  "name": "session-themes",
+  "version": "0.1.0",
+  "description": "Gives each Claude Code chat its own look, picked from its project folder: a faint animated backdrop, a light tint, and a picker in the session rail",
+  "author": { "name": "Sivants LLC" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

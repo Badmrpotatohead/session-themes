@@ -1,0 +1,6 @@
+{
+  "name": "session-themes",
+  "owner": { "name": "Sivants LLC" },
+  "description": "Per-chat looks for Claude Code: a faint backdrop, a light tint and a picker in the session rail",
+  "plugins": [{ "name": "session-themes", "source": "./" }]
+}
