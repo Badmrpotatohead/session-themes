@@ -202,3 +202,66 @@ test('a picker the person closed stays closed in that chat until /look', async (
   expect(opens.length).toBe(2)
   expect(JSON.stringify(opens[1])).toContain('"placement":"widget"')
 })
+
+test('a look shared with the whole project reaches the other chats in it, and resets', async ($, on) => {
+  const sets: unknown[] = []
+  const store = new Map<string, unknown>()
+  let sid = 'chat-a'
+  on('session.surfaces', () => ({ value: ['terminal'] }))
+  on('command.register', () => ({ value: { command: 'look' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.root', () => ({ value: 'D:/my-app' }))
+  on('session.id', () => ({ value: sid }))
+  on('store.get', (_, e) => ({ value: store.get(e.key) }))
+  on('store.set', (_, e) => {
+    store.set(e.key, e.value)
+    return { value: undefined }
+  })
+  on('store.delete', (_, e) => {
+    store.delete(e.key)
+    return { value: undefined }
+  })
+  on('theme.set', (_, e) => {
+    sets.push(e)
+    return { value: { isDrawn: true, requestId: 'r' } }
+  })
+  const scene = () => JSON.stringify(sets.at(-1)).match(/"scene":"([\w-]+)"/)?.[1]
+
+  // Chat A picks Paper, then shares it with the project.
+  await $.session.start({ cwd: 'D:/my-app', surface: 'desktop', isInteractive: true })
+  const automatic = scene()
+  expect(automatic).toMatch(/^auto-/)
+  await $.command.run(typed('paper'))
+  const shared = await $.command.run(typed('project'))
+  expect(shared.text).toContain('Every my-app chat now uses Paper')
+
+  // Chat B, new in the same project, starts with it; its Auto goes back to it too.
+  sid = 'chat-b'
+  await $.session.start({ cwd: 'D:/my-app', surface: 'desktop', isInteractive: true })
+  expect(scene()).toBe('paper')
+  await $.command.run(typed('space'))
+  expect(scene()).toBe('space')
+  await $.command.run(typed('auto'))
+  expect(scene()).toBe('paper')
+
+  // Reset: chat B and any new chat C are back to the automatic look.
+  const reset = await $.command.run(typed('project reset'))
+  expect(reset.text).toContain('automatic look')
+  expect(scene()).toBe(automatic)
+  sid = 'chat-c'
+  await $.session.start({ cwd: 'D:/my-app', surface: 'desktop', isInteractive: true })
+  expect(scene()).toBe(automatic)
+})
+
+test('the picker offers to share the look with the project, and to reset it', async ($, on) => {
+  engine(on, 'D:/my-app', [])
+  await $.session.start({ cwd: 'D:/my-app', surface: 'desktop', isInteractive: true })
+
+  const pane = await $.ui.mount({ ...PANE('dock'), surface: 'desktop' })
+  await pane.press({ key: 'set-music' })
+  await pane.press({ key: 'pin-project' })
+  expect((await pane.find({ type: 'Text', text: /Whole project: Music/ }))?.text).toContain('Music')
+  await pane.press({ key: 'unpin-project' })
+  expect((await pane.find({ type: 'Text', text: /Whole project: automatic/ }))?.text).toContain('automatic')
+  await pane.unmount()
+})

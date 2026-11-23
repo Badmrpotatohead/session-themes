@@ -14,13 +14,14 @@ const PANE_TITLE = 'Look'
 const active = atom({ plugin: 'session-themes', key: 'active' } as const, 'none')
 const detected = atom({ plugin: 'session-themes', key: 'detected' } as const, 'none')
 const folder = atom({ plugin: 'session-themes', key: 'folder' } as const, '')
+const projectLook = atom({ plugin: 'session-themes', key: 'projectLook' } as const, '')
 
 const NEUTRAL = '#8a8f98'
 
 const usage =
   'Use /look <name> with one of: ' +
   THEMES.map(one => one.id).join(', ') +
-  ", plain (the app's own look), or auto (this project's own look). /look alone opens the picker."
+  ", plain (the app's own look), or auto (back to this project's look). /look project uses this chat's look for every chat in the project; /look project reset puts the project back to automatic. /look alone opens the picker."
 
 // A chat with no theme still sets a look: the app's own page color and colors.
 // The app keeps the last look it was sent, so a chat that set none would
@@ -67,12 +68,55 @@ async function openWidget($: EngineInterface): Promise<void> {
   void $.ui.open({ id: PANE, title: PANE_TITLE, placement: 'widget' })
 }
 
+// A project's pick is kept under its name, so every chat in that project shares it.
+const projectKey = (name: string): string => `project:${name.toLowerCase()}`
+
+/** The look a chat follows when it has no pick of its own: the project's pick, else the folder's. */
+async function projectDefault($: EngineInterface): Promise<ThemeChoice> {
+  return (await read($, projectLook)) || (await read($, detected))
+}
+
+/**
+ * Reads the chat's look afresh: its own pick, else its project's, else the folder's.
+ * Repaints only when that changed, so a project pick made in another chat
+ * reaches this one when it starts or the app reconnects to it.
+ */
+async function resolve($: EngineInterface, isFirst: boolean): Promise<void> {
+  const own = await $.store.get(`choice:${await $.session.id()}`)
+  const shared = await $.store.get(projectKey(await read($, folder)))
+  await update($, projectLook, () => (typeof shared === 'string' ? shared : ''))
+  const id = typeof own === 'string' ? own : await projectDefault($)
+  if (isFirst || id !== (await read($, active))) {
+    await update($, active, () => id)
+    await paint($, id)
+  }
+}
+
+/** Makes this chat's look the project's: every chat in the project without its own pick follows it. */
+async function pinProject($: EngineInterface): Promise<string> {
+  const id = await read($, active)
+  const where = await read($, folder)
+  await $.store.set(projectKey(where), id)
+  await $.store.delete(`choice:${await $.session.id()}`)
+  await update($, projectLook, () => id)
+  return `Every ${where} chat now uses ${themeById(id)?.label ?? describe(id).toLowerCase()}, unless a chat has its own pick. Other open ${where} chats switch when they next start or the app reconnects.`
+}
+
+/** Puts the project back to its automatic look. */
+async function unpinProject($: EngineInterface): Promise<string> {
+  const where = await read($, folder)
+  await $.store.delete(projectKey(where))
+  await update($, projectLook, () => '')
+  await resolve($, false)
+  return `${where} chats are back to the project's automatic look.`
+}
+
 async function choose($: EngineInterface, wanted: string): Promise<string> {
   const sessionId = await $.session.id()
   let id: ThemeChoice
   if (wanted === 'auto') {
     await $.store.delete(`choice:${sessionId}`)
-    id = await read($, detected)
+    id = await projectDefault($)
   } else {
     id = wanted
     await $.store.set(`choice:${sessionId}`, id)
@@ -91,22 +135,17 @@ async function choose($: EngineInterface, wanted: string): Promise<string> {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const root = await $.session.root()
-    const found = detect(root)
-    const stored = await $.store.get(`choice:${await $.session.id()}`)
-    const id = typeof stored === 'string' ? stored : found
-
-    await update($, detected, () => found)
+    await update($, detected, () => detect(root))
     await update($, folder, () => folderName(root))
-    await update($, active, () => id)
-    await paint($, id)
+    await resolve($, true)
 
     // /theme is Claude Code's own command, so this one is /look. A refused
     // registration must not stop the theme from being drawn.
     await $.command
       .register({
         name: 'look',
-        description: "Switch this session's look (a theme name, plain, or auto)",
-        argumentHint: '[name]',
+        description: "Switch this session's look (a theme name, plain, auto, or project)",
+        argumentHint: '[name | project | project reset]',
       })
       .catch(() => undefined)
 
@@ -123,6 +162,8 @@ export const register: Register = on => {
   // switching to this chat) gets the widget too.
   on('session.attach', async ($, e, next) => {
     if (e.surface === 'desktop') {
+      // Pick up a project look chosen in another chat since this one started.
+      await resolve($, false)
       await openWidget($)
     }
     return next(e)
@@ -141,6 +182,12 @@ export const register: Register = on => {
     const wanted = e.args.trim().toLowerCase()
     if (wanted === '') {
       return { text: `${await showPicker($)} ${usage}` }
+    }
+    if (wanted === 'project') {
+      return { text: await pinProject($) }
+    }
+    if (wanted === 'project reset' || wanted === 'project auto') {
+      return { text: await unpinProject($) }
     }
     const match = THEMES.find(one => one.id === wanted || one.label.toLowerCase().startsWith(wanted))
     if (match !== undefined) {
@@ -202,13 +249,15 @@ export const register: Register = on => {
           <Text dimColor size="footnote">
             {theme !== undefined && theme.label.toLowerCase() !== where.toLowerCase() ? `${where} · ` : ''}
             {describe(id)}
+            {(await read($, projectLook)) === id ? ' · whole project' : ''}
           </Text>
         </Box>
       )
     }
 
-    // The look the folder picks, which the Auto button returns to.
-    const home = await read($, detected)
+    // The look the Auto button returns to: the project's pick, else the folder's.
+    const home = await projectDefault($)
+    const pinned = await read($, projectLook)
     const option = (key: string, label: string, isOn: boolean, pick: string) => (
       <Button
         key={key}
@@ -229,6 +278,30 @@ export const register: Register = on => {
           {THEMES.map(one => option(`set-${one.id}`, one.label, one.id === id, one.id))}
           {option('set-auto', parseAuto(home) !== undefined ? 'Own color' : 'Auto (project)', id === home, 'auto')}
           {option('set-plain', 'Plain', id === 'plain', 'plain')}
+        </Box>
+        <Box flexDirection="column" gap={1}>
+          <Text dimColor size="footnote">
+            {pinned !== '' ? `Whole project: ${describe(pinned)}` : 'Whole project: automatic'}
+          </Text>
+          {pinned !== id && (
+            <Button
+              key="pin-project"
+              label={`Use for all ${where} chats`}
+              onPress={async () => {
+                await pinProject($)
+              }}
+            />
+          )}
+          {pinned !== '' && (
+            <Button
+              key="unpin-project"
+              label="Project back to automatic"
+              dimColor
+              onPress={async () => {
+                await unpinProject($)
+              }}
+            />
+          )}
         </Box>
       </Box>
     )
