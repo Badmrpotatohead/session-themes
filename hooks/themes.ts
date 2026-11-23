@@ -34,7 +34,10 @@ function parts(path: string): string[] {
 }
 
 // Folders that hold projects rather than being one, skipped when naming a project.
-const CONTAINERS = new Set(['projects', 'code', 'dev', 'src', 'repos', 'git', 'github', 'documents', 'desktop', 'workspace', 'work'])
+const CONTAINERS = new Set([
+  'projects', 'code', 'dev', 'src', 'source', 'repos', 'git', 'github', 'documents', 'desktop', 'downloads',
+  'workspace', 'work', 'onedrive', 'appdata', 'local', 'temp', 'tmp',
+])
 
 /**
  * The project folder of a path: the first folder under the drive, the home

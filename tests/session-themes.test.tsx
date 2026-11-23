@@ -91,6 +91,15 @@ test('a macOS or Linux project path names the project too', async ($, on) => {
   await ui.unmount()
 })
 
+test("Visual Studio's source/repos folder is skipped when naming the project", async ($, on) => {
+  engine(on, 'C:/Users/alex/source/repos/billing', [])
+  await $.session.start({ cwd: 'C:/Users/alex/source/repos/billing', surface: 'desktop', isInteractive: true })
+
+  const ui = await $.ui.mount({ ...PANE('widget'), surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /^billing$/ }))?.text).toBe('billing')
+  await ui.unmount()
+})
+
 test('a drive or home folder sets the plain look, with no tint', async ($, on) => {
   const sets: unknown[] = []
   engine(on, '/home/sam', sets)
@@ -234,6 +243,14 @@ test('a look shared with the whole project reaches the other chats in it, and re
   await $.command.run(typed('paper'))
   const shared = await $.command.run(typed('project'))
   expect(shared.text).toContain('Every my-app chat now uses Paper')
+
+  // Sharing an automatic look names it plainly.
+  await $.command.run(typed('auto'))
+  await $.command.run(typed('project reset'))
+  const own = await $.command.run(typed('project'))
+  expect(own.text).toContain("now uses this chat's look")
+  await $.command.run(typed('paper'))
+  await $.command.run(typed('project'))
 
   // Chat B, new in the same project, starts with it; its Auto goes back to it too.
   sid = 'chat-b'
